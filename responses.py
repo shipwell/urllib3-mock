@@ -14,34 +14,31 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from __future__ import (
-    absolute_import, print_function, division, unicode_literals
-)
-
 import re
-import six
-
-if six.PY2:
-    try:
-        from six import cStringIO as BufferIO
-    except ImportError:
-        from six import StringIO as BufferIO
-else:
-    from io import BytesIO as BufferIO
+import sys
 
 import inspect
 from collections import namedtuple, Sequence, Sized
 from functools import update_wrapper as _update_wrapper
+
+if sys.version_info < (3,):     # Python 2
+    from cStringIO import StringIO as BytesIO
+    from urlparse import urlparse, parse_qsl
+
+    def _exec(code, g):
+        exec('exec code in g')
+else:                           # Python 3
+    from io import BytesIO
+    from urllib.parse import urlparse, parse_qsl
+
+    _exec = getattr(__import__('builtins'), 'exec')
+    basestring = unicode = str
+
 from requests.exceptions import ConnectionError
 try:
     from requests.packages.urllib3.response import HTTPResponse
 except ImportError:
     from urllib3.response import HTTPResponse
-if six.PY2:
-    from urlparse import urlparse, parse_qsl
-else:
-    from urllib.parse import urlparse, parse_qsl
-
 
 Call = namedtuple('Call', ['request', 'response'])
 
@@ -69,7 +66,7 @@ def update_wrapper(wrapper, wrapped):
 
     evaldict = {'tgt_func': wrapper}
 
-    six.exec_(_wrapper_template % ctx, evaldict)
+    _exec(_wrapper_template % ctx, evaldict)
 
     wrapper = evaldict['_wrapper_']
     if hasattr(wrapped, 'func_defaults'):
@@ -125,7 +122,7 @@ class RequestsMock(object):
                 else url + '/'
 
         # body must be bytes
-        if isinstance(body, six.text_type):
+        if isinstance(body, unicode):
             body = body.encode('utf-8')
 
         self._urls.append({
@@ -205,7 +202,7 @@ class RequestsMock(object):
         return url_qsl == other_qsl
 
     def _is_string(self, s):
-        return isinstance(s, (six.string_types, six.text_type))
+        return isinstance(s, basestring)
 
     def _on_request(self, session, request, **kwargs):
         match = self._find_match(request)
@@ -228,7 +225,7 @@ class RequestsMock(object):
 
         if 'callback' in match:  # use callback
             status, r_headers, body = match['callback'](request)
-            if isinstance(body, six.text_type):
+            if isinstance(body, unicode):
                 body = body.encode('utf-8')
             body = BufferIO(body)
             headers.update(r_headers)

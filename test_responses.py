@@ -1,15 +1,12 @@
-from __future__ import (
-    absolute_import, print_function, division, unicode_literals
-)
+import re
+from inspect import getargspec
 
 import mock
-import re
-import requests
-import responses
 import pytest
-
-from inspect import getargspec
+import requests
 from requests.exceptions import ConnectionError, HTTPError
+
+import responses
 
 
 def assert_reset():
