@@ -3,7 +3,7 @@ develop:
 	make install-test-requirements
 
 install-test-requirements:
-	pip install "file://`pwd`#egg=responses[tests]"
+	pip install "file://`pwd`#egg=urllib3-mock[tests]"
 
 test: develop lint
 	@echo "Running Python tests"
@@ -12,5 +12,5 @@ test: develop lint
 
 lint:
 	@echo "Linting Python files"
-	PYFLAKES_NODOCTEST=1 flake8 .
+	flake8 .
 	@echo ""
