@@ -15,11 +15,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import re
 import sys
-
 import inspect
-from collections import namedtuple, Sequence, Sized
+from collections import namedtuple
 from functools import update_wrapper
 
 if sys.version_info < (3,):     # Python 2
@@ -33,7 +31,7 @@ else:                           # Python 3
     from urllib.parse import urlparse, parse_qsl
 
     _exec = getattr(__import__('builtins'), 'exec')
-    basestring = unicode = str
+    unicode = str
 
 Call = namedtuple('Call', ['request', 'response'])
 Request = namedtuple('Request', ['method', 'url', 'body', 'headers',
@@ -75,24 +73,10 @@ def get_wrapped(func, wrapper_template, evaldict):
     return wrapper
 
 
-class CallList(Sequence, Sized):
-    def __init__(self):
-        self._calls = []
-
-    def __iter__(self):
-        return iter(self._calls)
-
-    def __len__(self):
-        return len(self._calls)
-
-    def __getitem__(self, idx):
-        return self._calls[idx]
+class CallList(list):
 
     def add(self, request, response):
-        self._calls.append(Call(request, response))
-
-    def reset(self):
-        self._calls = []
+        self.append(Call(request, response))
 
 
 class Responses(object):
@@ -105,30 +89,22 @@ class Responses(object):
     PUT = 'PUT'
 
     def __init__(self, package='urllib3'):
-        # or package='requests.packages.urllib3'
-        ctx = {'package': package}
         evaldict = {}
-        _exec(_urllib3_import % ctx, evaldict)
+        _exec(_urllib3_import % {'package': package}, evaldict)
 
         self._package = package
         self._request_class = Request
         self._response_class = evaldict['HTTPResponse']
         self._error_class = evaldict['ProtocolError']
-        self._calls = CallList()
         self.reset()
 
     def reset(self):
         self._urls = []
-        self._calls.reset()
+        self._calls = CallList()
 
     def add(self, method, url, body='', match_querystring=False,
             status=200, adding_headers=None,
             content_type='text/plain'):
-
-        # ensure the url has a default path set if the url is a string
-        if self._is_string(url) and url.count('/') == 2:
-            url = url.replace('?', '/?', 1) if match_querystring \
-                else url + '/'
 
         # body must be bytes
         if isinstance(body, unicode):
@@ -172,29 +148,19 @@ class Responses(object):
 
     def _find_match(self, request):
         for match in self._urls:
-            if request.method != match['method']:
-                continue
-
-            if not self._has_url_match(match, request.url):
-                continue
-
-            return match
-
-        return None
+            if request.method == match['method'] and \
+               self._has_url_match(match, request.url):
+                return match
 
     def _has_url_match(self, match, request_url):
         url = match['url']
 
-        if self._is_string(url):
-            if match['match_querystring']:
-                return self._has_strict_url_match(url, request_url)
-            else:
-                url_without_qs = request_url.split('?', 1)[0]
-                return url == url_without_qs
-        elif isinstance(url, re._pattern_type) and url.match(request_url):
-            return True
-        else:
-            return False
+        if hasattr(url, 'match'):
+            return url.match(request_url)
+        if match['match_querystring']:
+            return self._has_strict_url_match(url, request_url)
+
+        return url == request_url.partition('?')[0]
 
     def _has_strict_url_match(self, url, other):
         url_parsed = urlparse(url)
@@ -206,9 +172,6 @@ class Responses(object):
         url_qsl = sorted(parse_qsl(url_parsed.query))
         other_qsl = sorted(parse_qsl(other_parsed.query))
         return url_qsl == other_qsl
-
-    def _is_string(self, s):
-        return isinstance(s, basestring)
 
     def _urlopen(self, pool, method, url, body=None, headers=None, **kwargs):
         request = self._request_class(method, url, body, headers,
@@ -222,36 +185,33 @@ class Responses(object):
             self._calls.add(request, response)
             raise response
 
-        if 'body' in match and isinstance(match['body'], Exception):
-            self._calls.add(request, match['body'])
-            raise match['body']
-
         headers = {
             'Content-Type': match['content_type'],
         }
 
         if 'callback' in match:  # use callback
             status, r_headers, body = match['callback'](request)
+            headers.update(r_headers)
             if isinstance(body, unicode):
                 body = body.encode('utf-8')
-            body = BytesIO(body)
-            headers.update(r_headers)
-
-        elif 'body' in match:
+        else:
+            status = match['status']
             if match['adding_headers']:
                 headers.update(match['adding_headers'])
-            status = match['status']
-            body = BytesIO(match['body'])
+            body = match['body']
+
+        if isinstance(body, Exception):
+            self._calls.add(request, body)
+            raise body
 
         response = self._response_class(
             status=status,
-            body=body,
+            body=BytesIO(body),
             headers=headers,
             preload_content=False,
         )
 
         self._calls.add(request, response)
-
         return response
 
     def start(self):
