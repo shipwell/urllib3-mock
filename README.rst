@@ -5,7 +5,7 @@ A utility library for mocking out the `urllib3`_ Python library.
 
 This is an adaptation of the `responses`_ library.
 
-.. image:: https://travis-ci.org/florentx/urllib3-mock?branch=master
+.. image:: https://travis-ci.org/florentx/urllib3-mock.png?branch=master
 	:target: https://travis-ci.org/florentx/urllib3-mock
 
 
