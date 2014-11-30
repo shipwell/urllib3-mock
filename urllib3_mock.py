@@ -1,4 +1,5 @@
 """
+Copyright 2014 Florent Xicluna
 Copyright 2013 Dropbox, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,11 +15,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import re
 import sys
-
 import inspect
-from collections import namedtuple, Sequence, Sized
+from collections import namedtuple
 from functools import update_wrapper
 
 if sys.version_info < (3,):     # Python 2
@@ -32,21 +31,22 @@ else:                           # Python 3
     from urllib.parse import urlparse, parse_qsl
 
     _exec = getattr(__import__('builtins'), 'exec')
-    basestring = unicode = str
-
-from requests.exceptions import ConnectionError
-try:
-    from requests.packages.urllib3.response import HTTPResponse
-except ImportError:
-    from urllib3.response import HTTPResponse
+    unicode = str
 
 Call = namedtuple('Call', ['request', 'response'])
-
+Request = namedtuple('Request', ['method', 'url', 'body', 'headers',
+                                 'scheme', 'host', 'port'])
+_urllib3_import = """\
+from %(package)s.response import HTTPResponse
+from %(package)s.exceptions import ProtocolError
+"""
 _wrapper_template = """\
 def wrapper%(signature)s:
     with responses:
         return func%(funcargs)s
 """
+
+__all__ = ['Responses']
 
 
 def get_wrapped(func, wrapper_template, evaldict):
@@ -73,27 +73,13 @@ def get_wrapped(func, wrapper_template, evaldict):
     return wrapper
 
 
-class CallList(Sequence, Sized):
-    def __init__(self):
-        self._calls = []
-
-    def __iter__(self):
-        return iter(self._calls)
-
-    def __len__(self):
-        return len(self._calls)
-
-    def __getitem__(self, idx):
-        return self._calls[idx]
+class CallList(list):
 
     def add(self, request, response):
-        self._calls.append(Call(request, response))
-
-    def reset(self):
-        self._calls = []
+        self.append(Call(request, response))
 
 
-class RequestsMock(object):
+class Responses(object):
     DELETE = 'DELETE'
     GET = 'GET'
     HEAD = 'HEAD'
@@ -102,22 +88,23 @@ class RequestsMock(object):
     POST = 'POST'
     PUT = 'PUT'
 
-    def __init__(self):
-        self._calls = CallList()
+    def __init__(self, package='urllib3'):
+        evaldict = {}
+        _exec(_urllib3_import % {'package': package}, evaldict)
+
+        self._package = package
+        self._request_class = Request
+        self._response_class = evaldict['HTTPResponse']
+        self._error_class = evaldict['ProtocolError']
         self.reset()
 
     def reset(self):
         self._urls = []
-        self._calls.reset()
+        self._calls = CallList()
 
     def add(self, method, url, body='', match_querystring=False,
-            status=200, adding_headers=None, stream=False,
+            status=200, adding_headers=None,
             content_type='text/plain'):
-
-        # ensure the url has a default path set if the url is a string
-        if self._is_string(url) and url.count('/') == 2:
-            url = url.replace('?', '/?', 1) if match_querystring \
-                else url + '/'
 
         # body must be bytes
         if isinstance(body, unicode):
@@ -131,7 +118,6 @@ class RequestsMock(object):
             'match_querystring': match_querystring,
             'status': status,
             'adding_headers': adding_headers,
-            'stream': stream,
         })
 
     def add_callback(self, method, url, callback, match_querystring=False,
@@ -162,29 +148,19 @@ class RequestsMock(object):
 
     def _find_match(self, request):
         for match in self._urls:
-            if request.method != match['method']:
-                continue
-
-            if not self._has_url_match(match, request.url):
-                continue
-
-            return match
-
-        return None
+            if request.method == match['method'] and \
+               self._has_url_match(match, request.url):
+                return match
 
     def _has_url_match(self, match, request_url):
         url = match['url']
 
-        if self._is_string(url):
-            if match['match_querystring']:
-                return self._has_strict_url_match(url, request_url)
-            else:
-                url_without_qs = request_url.split('?', 1)[0]
-                return url == url_without_qs
-        elif isinstance(url, re._pattern_type) and url.match(request_url):
-            return True
-        else:
-            return False
+        if hasattr(url, 'match'):
+            return url.match(request_url)
+        if match['match_querystring']:
+            return self._has_strict_url_match(url, request_url)
+
+        return url == request_url.partition('?')[0]
 
     def _has_strict_url_match(self, url, other):
         url_parsed = urlparse(url)
@@ -197,23 +173,17 @@ class RequestsMock(object):
         other_qsl = sorted(parse_qsl(other_parsed.query))
         return url_qsl == other_qsl
 
-    def _is_string(self, s):
-        return isinstance(s, basestring)
-
-    def _on_request(self, session, request, **kwargs):
+    def _urlopen(self, pool, method, url, body=None, headers=None, **kwargs):
+        request = self._request_class(method, url, body, headers,
+                                      pool.scheme, pool.host, pool.port)
         match = self._find_match(request)
 
-        # TODO(dcramer): find the correct class for this
         if match is None:
             error_msg = 'Connection refused: {0}'.format(request.url)
-            response = ConnectionError(error_msg)
+            response = self._error_class(error_msg)
 
             self._calls.add(request, response)
             raise response
-
-        if 'body' in match and isinstance(match['body'], Exception):
-            self._calls.add(request, match['body'])
-            raise match['body']
 
         headers = {
             'Content-Type': match['content_type'],
@@ -221,49 +191,38 @@ class RequestsMock(object):
 
         if 'callback' in match:  # use callback
             status, r_headers, body = match['callback'](request)
+            headers.update(r_headers)
             if isinstance(body, unicode):
                 body = body.encode('utf-8')
-            body = BufferIO(body)
-            headers.update(r_headers)
-
-        elif 'body' in match:
+        else:
+            status = match['status']
             if match['adding_headers']:
                 headers.update(match['adding_headers'])
-            status = match['status']
-            body = BufferIO(match['body'])
+            body = match['body']
 
-        response = HTTPResponse(
+        if isinstance(body, Exception):
+            self._calls.add(request, body)
+            raise body
+
+        response = self._response_class(
             status=status,
-            body=body,
+            body=BytesIO(body),
             headers=headers,
             preload_content=False,
         )
 
-        adapter = session.get_adapter(request.url)
-
-        response = adapter.build_response(request, response)
-        if not match.get('stream'):
-            response.content  # NOQA
-
         self._calls.add(request, response)
-
         return response
 
     def start(self):
         import mock
 
-        def unbound_on_send(session, requests, *a, **kwargs):
-            return self._on_request(session, requests, *a, **kwargs)
-        self._patcher = mock.patch('requests.Session.send', unbound_on_send)
+        def _urlopen(pool, method, url, body=None, headers=None, **kwargs):
+            return self._urlopen(pool, method, url, body=body, headers=headers,
+                                 **kwargs)
+        target = self._package + '.connectionpool.HTTPConnectionPool.urlopen'
+        self._patcher = mock.patch(target, _urlopen)
         self._patcher.start()
 
     def stop(self):
         self._patcher.stop()
-
-
-# expose default mock namespace
-mock = _default_mock = RequestsMock()
-__all__ = []
-for __attr in (a for a in dir(_default_mock) if not a.startswith('_')):
-    __all__.append(__attr)
-    globals()[__attr] = getattr(_default_mock, __attr)

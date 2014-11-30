@@ -1,22 +1,31 @@
-Responses
-=========
+urllib3-mock
+============
 
-.. image:: https://travis-ci.org/dropbox/responses.png?branch=master
-	:target: https://travis-ci.org/dropbox/responses
+A utility library for mocking out the `urllib3`_ Python library.
 
-A utility library for mocking out the `requests` Python library.
+This is an adaptation of the `responses`_ library.
+
+.. image:: https://travis-ci.org/florentx/urllib3-mock?branch=master
+	:target: https://travis-ci.org/florentx/urllib3-mock
+
+
+.. _urllib3: https://urllib3.readthedocs.org/
+.. _responses: https://github.com/dropbox/responses
+
 
 Response body as string
 -----------------------
 
 .. code-block:: python
 
-    import responses
+    from urllib3_mock import Responses
     import requests
+
+    responses = Responses('requests.packages.urllib3')
 
     @responses.activate
     def test_my_api():
-        responses.add(responses.GET, 'http://twitter.com/api/1/foobar',
+        responses.add('GET', '/api/1/foobar',
                       body='{"error": "not found"}', status=404,
                       content_type='application/json')
 
@@ -25,8 +34,9 @@ Response body as string
         assert resp.json() == {"error": "not found"}
 
         assert len(responses.calls) == 1
-        assert responses.calls[0].request.url == 'http://twitter.com/api/1/foobar'
-        assert responses.calls[0].response.text == '{"error": "not found"}'
+        assert responses.calls[0].request.url == '/api/1/foobar'
+        assert responses.calls[0].request.host == 'twitter.com'
+        assert responses.calls[0].request.scheme == 'http'
 
 Request callback
 ----------------
@@ -35,8 +45,10 @@ Request callback
 
     import json
 
-    import responses
+    from urllib3_mock import Responses
     import requests
+
+    responses = Responses('requests.packages.urllib3')
 
     @responses.activate
     def test_calc_api():
@@ -47,11 +59,9 @@ Request callback
             headers = {'request-id': '728d329e-0e86-11e4-a748-0c84dc037c13'}
             return (200, headers, json.dumps(resp_body))
 
-        responses.add_callback(
-            responses.POST, 'http://calc.com/sum',
-            callback=request_callback,
-            content_type='application/json',
-        )
+        responses.add_callback('POST', '/sum',
+                               callback=request_callback,
+                               content_type='application/json')
 
         resp = requests.post(
             'http://calc.com/sum',
@@ -62,8 +72,8 @@ Request callback
         assert resp.json() == {'value': 6}
 
         assert len(responses.calls) == 1
-        assert responses.calls[0].request.url == 'http://calc.com/sum'
-        assert responses.calls[0].response.text == '{"value": 6}'
+        assert responses.calls[0].request.url == '/sum'
+        assert responses.calls[0].request.host == 'calc.com'
         assert (
             responses.calls[0].response.headers['request-id'] ==
             '728d329e-0e86-11e4-a748-0c84dc037c13'
@@ -75,17 +85,19 @@ you can also supply a compiled regular expression.
 .. code-block:: python
 
     import re
-    import responses
+    from urllib3_mock import Responses
     import requests
 
+    responses = Responses('requests.packages.urllib3')
+
     # Instead of
-    responses.add(responses.GET, 'http://twitter.com/api/1/foobar',
+    responses.add('GET', '/api/1/foobar',
                   body='{"error": "not found"}', status=404,
                   content_type='application/json')
 
     # You can do the following
-    url_re = re.compile(r'https?://twitter.com/api/\d+/foobar')
-    responses.add(responses.GET, url_re,
+    url_re = re.compile(r'/api/\d+/foobar')
+    responses.add('GET', url_re,
                   body='{"error": "not found"}', status=404,
                   content_type='application/json')
 
@@ -93,17 +105,15 @@ A response can also throw an exception as follows.
 
 .. code-block:: python
 
-    import responses
-    import requests
-    from requests.exceptions import HTTPError
+    from urllib3_mock import Responses
+    from requests.packages.urllib3.exceptions import HTTPError
 
     exception = HTTPError('Something went wrong')
-    responses.add(responses.GET, 'http://twitter.com/api/1/foobar',
+
+    responses = Responses('requests.packages.urllib3')
+    responses.add('GET', '/api/1/foobar',
                   body=exception)
     # All calls to 'http://twitter.com/api/1/foobar' will throw exception.
-
-
-.. note:: Responses requires Requests >= 1.0
 
 
 License
@@ -111,6 +121,7 @@ License
 
 ::
 
+	Copyright 2014 Florent Xicluna
 	Copyright 2013 Dropbox, Inc.
 
 	Licensed under the Apache License, Version 2.0 (the "License");

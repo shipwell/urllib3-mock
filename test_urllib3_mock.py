@@ -1,16 +1,18 @@
 import re
 from inspect import getargspec
 
-import mock
 import pytest
 import requests
-from requests.exceptions import ConnectionError, HTTPError
+from requests.exceptions import ConnectionError
+from requests.packages.urllib3.exceptions import ProtocolError, HTTPError
 
-import responses
+from urllib3_mock import Responses
+
+responses = Responses('requests.packages.urllib3')
 
 
 def assert_reset():
-    assert len(responses._default_mock._urls) == 0
+    assert len(responses._urls) == 0
     assert len(responses.calls) == 0
 
 
@@ -23,18 +25,19 @@ def assert_response(resp, body=None):
 def test_response():
     @responses.activate
     def run():
-        responses.add(responses.GET, 'http://example.com', body=b'test')
+        responses.add(responses.GET, '/', body=b'test')
         resp = requests.get('http://example.com')
         assert_response(resp, 'test')
         assert len(responses.calls) == 1
-        assert responses.calls[0].request.url == 'http://example.com/'
-        assert responses.calls[0].response.content == b'test'
+        assert responses.calls[0].request.url == '/'
+        assert responses.calls[0].request.scheme == 'http'
+        assert responses.calls[0].request.host == 'example.com'
+        assert responses.calls[0].request.port == 80
 
         resp = requests.get('http://example.com?foo=bar')
         assert_response(resp, 'test')
         assert len(responses.calls) == 2
-        assert responses.calls[1].request.url == 'http://example.com/?foo=bar'
-        assert responses.calls[1].response.content == b'test'
+        assert responses.calls[1].request.url == '/?foo=bar'
 
     run()
     assert_reset()
@@ -43,14 +46,14 @@ def test_response():
 def test_connection_error():
     @responses.activate
     def run():
-        responses.add(responses.GET, 'http://example.com')
+        responses.add(responses.GET, '/')
 
         with pytest.raises(ConnectionError):
             requests.get('http://example.com/foo')
 
         assert len(responses.calls) == 1
-        assert responses.calls[0].request.url == 'http://example.com/foo'
-        assert type(responses.calls[0].response) is ConnectionError
+        assert responses.calls[0].request.url == '/foo'
+        assert type(responses.calls[0].response) is ProtocolError
 
     run()
     assert_reset()
@@ -59,7 +62,7 @@ def test_connection_error():
 def test_match_querystring():
     @responses.activate
     def run():
-        url = 'http://example.com?test=1&foo=bar'
+        url = '/?test=1&foo=bar'
         responses.add(
             responses.GET, url,
             match_querystring=True, body=b'test')
@@ -76,7 +79,7 @@ def test_match_querystring_error():
     @responses.activate
     def run():
         responses.add(
-            responses.GET, 'http://example.com/?test=1',
+            responses.GET, '/?test=1',
             match_querystring=True)
 
         with pytest.raises(ConnectionError):
@@ -93,14 +96,14 @@ def test_match_querystring_regex():
         regular expression"""
 
         responses.add(
-            responses.GET, re.compile(r'http://example\.com/foo/\?test=1'),
+            responses.GET, re.compile(r'/foo/\?test=1'),
             body='test1', match_querystring=True)
 
         resp = requests.get('http://example.com/foo/?test=1')
         assert_response(resp, 'test1')
 
         responses.add(
-            responses.GET, re.compile(r'http://example\.com/foo/\?test=2'),
+            responses.GET, re.compile(r'/foo/\?test=2'),
             body='test2', match_querystring=False)
 
         resp = requests.get('http://example.com/foo/?test=2')
@@ -117,14 +120,14 @@ def test_match_querystring_error_regex():
         regular expression"""
 
         responses.add(
-            responses.GET, re.compile(r'http://example\.com/foo/\?test=1'),
+            responses.GET, re.compile(r'/foo/\?test=1'),
             match_querystring=True)
 
         with pytest.raises(ConnectionError):
             requests.get('http://example.com/foo/?test=3')
 
         responses.add(
-            responses.GET, re.compile(r'http://example\.com/foo/\?test=2'),
+            responses.GET, re.compile(r'/foo/\?test=2'),
             match_querystring=False)
 
         with pytest.raises(ConnectionError):
@@ -139,7 +142,7 @@ def test_accept_string_body():
     def run():
         url = 'http://example.com/'
         responses.add(
-            responses.GET, url, body='test')
+            responses.GET, '/', body='test')
         resp = requests.get(url)
         assert_response(resp, 'test')
 
@@ -153,7 +156,7 @@ def test_throw_connection_error_explicit():
         url = 'http://example.com'
         exception = HTTPError('HTTP Error')
         responses.add(
-            responses.GET, url, exception)
+            responses.GET, '/', exception)
 
         with pytest.raises(HTTPError) as HE:
             requests.get(url)
@@ -175,7 +178,7 @@ def test_callback():
 
     @responses.activate
     def run():
-        responses.add_callback(responses.GET, url, request_callback)
+        responses.add_callback(responses.GET, '/', request_callback)
         resp = requests.get(url)
         assert resp.text == "test callback"
         assert resp.status_code == status
@@ -189,68 +192,38 @@ def test_callback():
 def test_regular_expression_url():
     @responses.activate
     def run():
-        url = re.compile(r'https?://(.*\.)?example.com')
+        url = re.compile(r'/(.*\.)?examples?')
         responses.add(responses.GET, url, body=b'test')
 
-        resp = requests.get('http://example.com')
+        resp = requests.get('http://nowhere.invalid/example')
         assert_response(resp, 'test')
 
-        resp = requests.get('https://example.com')
+        resp = requests.get('https://nowhere.invalid/examples')
         assert_response(resp, 'test')
 
-        resp = requests.get('https://uk.example.com')
+        resp = requests.get('http://nowhere.invalid/uk.example')
         assert_response(resp, 'test')
 
         with pytest.raises(ConnectionError):
-            requests.get('https://uk.exaaample.com')
+            requests.get('http://nowhere.invalid/uk.exaaample')
 
     run()
     assert_reset()
 
 
-def test_custom_adapter():
-    @responses.activate
-    def run():
-        url = "http://example.com"
-        responses.add(responses.GET, url, body=b'test')
-
-        class DummyAdapter(requests.adapters.HTTPAdapter):
-            pass
-
-        # Test that the adapter is actually used
-        adapter = mock.Mock(spec=DummyAdapter())
-        session = requests.Session()
-        session.mount("http://", adapter)
-
-        resp = session.get(url)
-        assert adapter.build_response.called == 1
-
-        # Test that the response is still correctly emulated
-        session = requests.Session()
-        session.mount("http://", DummyAdapter())
-
-        resp = session.get(url)
-        assert_response(resp, 'test')
-
-    run()
-
-
 def test_responses_as_context_manager():
     def run():
-        with responses.mock:
-            responses.add(responses.GET, 'http://example.com', body=b'test')
+        with responses:
+            responses.add(responses.GET, '/', body=b'test')
             resp = requests.get('http://example.com')
             assert_response(resp, 'test')
             assert len(responses.calls) == 1
-            assert responses.calls[0].request.url == 'http://example.com/'
-            assert responses.calls[0].response.content == b'test'
+            assert responses.calls[0].request.url == '/'
 
             resp = requests.get('http://example.com?foo=bar')
             assert_response(resp, 'test')
             assert len(responses.calls) == 2
-            assert (responses.calls[1].request.url ==
-                    'http://example.com/?foo=bar')
-            assert responses.calls[1].response.content == b'test'
+            assert responses.calls[1].request.url == '/?foo=bar'
 
     run()
     assert_reset()
