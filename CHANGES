@@ -1,3 +1,7 @@
+0.3.2
+
+- Add universal wheel support
+
 0.3.1
 
 - Fork the `responses` library, version 0.3, to mock `urllib3`
