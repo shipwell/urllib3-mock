@@ -4,16 +4,16 @@ from collections import namedtuple
 from functools import update_wrapper
 
 if sys.version_info < (3,):     # Python 2
+    from httplib import responses as http_reasons
     from cStringIO import StringIO as BytesIO
     from urlparse import urlparse, parse_qsl
-    from httplib import responses as http_responses
 
     def _exec(code, g):
         exec('exec code in g')
 else:                           # Python 3
+    from http.client import responses as http_reasons
     from io import BytesIO
     from urllib.parse import urlparse, parse_qsl
-    from http.client import responses as http_responses
 
     _exec = getattr(__import__('builtins'), 'exec')
     unicode = str
@@ -193,7 +193,7 @@ class Responses(object):
             status, reason = status.split(None, 1)
             status = int(status)
         else:
-            reason = http_responses.get(status)
+            reason = http_reasons.get(status)
 
         if r_headers:
             headers.update(r_headers)

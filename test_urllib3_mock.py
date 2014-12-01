@@ -163,6 +163,19 @@ def test_accept_string_body():
     assert_reset()
 
 
+def test_custom_http_status():
+    @responses.activate
+    def run():
+        responses.add(
+            responses.GET, '/', '', status="418 I'm a teapot")
+        resp = requests.get('http://example.com')
+        assert resp.status_code == 418
+        assert resp.reason == "I'm a teapot"
+
+    run()
+    assert_reset()
+
+
 def test_throw_connection_error_explicit():
     @responses.activate
     def run():
