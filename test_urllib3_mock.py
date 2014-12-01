@@ -205,6 +205,27 @@ def test_callback():
     assert_reset()
 
 
+def test_callback_noheaders():
+    body = 'test no additional header'
+    status = 200
+    url = 'http://example.com/'
+
+    def request_callback(request):
+        return (status, None, body)
+
+    @responses.activate
+    def run():
+        responses.add_callback(responses.GET, '/', request_callback)
+        resp = requests.get(url)
+        assert resp.text == "test no additional header"
+        assert resp.status_code == status
+        assert 'content-type' in resp.headers
+        assert resp.headers['content-type'] == 'text/plain'
+
+    run()
+    assert_reset()
+
+
 def test_regular_expression_url():
     @responses.activate
     def run():

@@ -114,11 +114,9 @@ class Responses(object):
         self._urls.append({
             'url': url,
             'method': method,
-            'body': body,
+            'return': (status, adding_headers, body),
             'content_type': content_type,
             'match_querystring': match_querystring,
-            'status': status,
-            'adding_headers': adding_headers,
         })
 
     def add_callback(self, method, url, callback, match_querystring=False,
@@ -192,18 +190,17 @@ class Responses(object):
 
         if 'callback' in match:  # use callback
             status, r_headers, body = match['callback'](request)
-            headers.update(r_headers)
             if isinstance(body, unicode):
                 body = body.encode('utf-8')
         else:
-            status = match['status']
-            if match['adding_headers']:
-                headers.update(match['adding_headers'])
-            body = match['body']
+            status, r_headers, body = match['return']
 
         if isinstance(body, Exception):
             self._calls.add(request, body)
             raise body
+
+        if r_headers:
+            headers.update(r_headers)
 
         response = self._response_class(
             status=status,
