@@ -29,15 +29,27 @@ def test_response():
         resp = requests.get('http://example.com')
         assert_response(resp, 'test')
         assert len(responses.calls) == 1
-        assert responses.calls[0].request.url == '/'
-        assert responses.calls[0].request.scheme == 'http'
-        assert responses.calls[0].request.host == 'example.com'
-        assert responses.calls[0].request.port == 80
+        req = responses.calls[0].request
+        assert req.method == 'GET'
+        assert req.url == '/'
+        assert req.scheme == 'http'
+        assert req.host == 'example.com'
+        assert req.port == 80
+        assert 'Accept' in req.headers
+        assert req.headers['Connection'] == 'keep-alive'
+        assert req.body is None
 
         resp = requests.get('http://example.com?foo=bar')
         assert_response(resp, 'test')
         assert len(responses.calls) == 2
-        assert responses.calls[1].request.url == '/?foo=bar'
+        assert responses.calls[-1].request.url == '/?foo=bar'
+
+        # With HTTPS too
+        resp = requests.get('https://example.com')
+        assert_response(resp, 'test')
+        assert len(responses.calls) == 3
+        assert responses.calls[-1].request.url == '/'
+        assert responses.calls[-1].request.scheme == 'https'
 
     run()
     assert_reset()
@@ -174,6 +186,10 @@ def test_callback():
     url = 'http://example.com/'
 
     def request_callback(request):
+        assert request.url == '/'
+        assert request.scheme == 'http'
+        assert request.host == 'example.com'
+        assert request.port == 80
         return (status, headers, body)
 
     @responses.activate
@@ -206,6 +222,50 @@ def test_regular_expression_url():
 
         with pytest.raises(ConnectionError):
             requests.get('http://nowhere.invalid/uk.exaaample')
+
+    run()
+    assert_reset()
+
+
+def test_catchall():
+    status = 400
+    headers = {'foo': 'bar'}
+
+    def request_callback(request):
+        body = str(request)
+        return (status, headers, body)
+
+    @responses.activate
+    def run():
+        responses.add_callback(responses.GET, responses.ANY, request_callback)
+        resp0 = requests.get('http://example.com/')
+        resp1 = requests.get('https://example.com/')
+        resp2 = requests.get('http://example.com/rabbit')
+        resp3 = requests.get('https://example.com?bar=foo#123')
+        assert resp0.status_code == status
+        assert 'foo' in resp1.headers
+        assert resp3.headers['foo'] == 'bar'
+        assert "host='example.com'" in resp0.text
+        assert "scheme='https'" in resp1.text
+        assert "url='/rabbit'" in resp2.text
+        assert "url='/?bar=foo'" in resp3.text
+
+        with pytest.raises(ConnectionError):
+            requests.post('http://example.com/')
+        assert len(responses.calls) == 5
+
+        responses.reset()
+        responses.add_callback(responses.ANY, '/', request_callback)
+        resp0 = requests.get('http://example.com')
+        resp1 = requests.head('http://example.com')
+        resp2 = requests.post('http://example.com')
+        assert "method='GET'" in resp0.text
+        assert "method='HEAD'" in resp1.text
+        assert "method='POST'" in resp2.text
+
+        with pytest.raises(ConnectionError):
+            requests.post('http://example.com/rabbit')
+        assert len(responses.calls) == 4
 
     run()
     assert_reset()

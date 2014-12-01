@@ -20,6 +20,8 @@ import inspect
 from collections import namedtuple
 from functools import update_wrapper
 
+import mock
+
 if sys.version_info < (3,):     # Python 2
     from cStringIO import StringIO as BytesIO
     from urlparse import urlparse, parse_qsl
@@ -78,6 +80,7 @@ class CallList(list):
 
 
 class Responses(object):
+    ANY = mock.ANY
     DELETE = 'DELETE'
     GET = 'GET'
     HEAD = 'HEAD'
@@ -213,8 +216,6 @@ class Responses(object):
         return response
 
     def start(self):
-        import mock
-
         def _urlopen(pool, method, url, body=None, headers=None, **kwargs):
             return self._urlopen(pool, method, url, body=body, headers=headers,
                                  **kwargs)
