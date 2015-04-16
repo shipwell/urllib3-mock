@@ -6,8 +6,9 @@ urllib3-mock
 A utility library for mocking out the `urllib3` Python library.
 This is an adaptation of the `responses` library.
 
-:copyright: (c) 2014 Florent Xicluna
-:copyright: (c) 2013 Dropbox, Inc.
+:copyright: (c) 2015 Florent Xicluna
+:copyright: (c) 2015 David Cramer
+:license: Apache 2.0
 """
 
 from setuptools import setup
@@ -58,6 +59,7 @@ setup(
     description=(
         'A utility library for mocking out the `urllib3` Python library.'
     ),
+    license='Apache 2.0',
     long_description=long_description,
     py_modules=['urllib3_mock'],
     zip_safe=False,
