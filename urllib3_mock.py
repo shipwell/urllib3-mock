@@ -25,12 +25,14 @@ import mock
 if sys.version_info < (3,):     # Python 2
     from cStringIO import StringIO as BytesIO
     from urlparse import urlparse, parse_qsl
+    from httplib import responses as http_responses
 
     def _exec(code, g):
         exec('exec code in g')
 else:                           # Python 3
     from io import BytesIO
     from urllib.parse import urlparse, parse_qsl
+    from http.client import responses as http_responses
 
     _exec = getattr(__import__('builtins'), 'exec')
     unicode = str
@@ -200,11 +202,18 @@ class Responses(object):
             self._calls.add(request, body)
             raise body
 
+        if isinstance(status, basestring):
+            status, reason = status.split(None, 1)
+            status = int(status)
+        else:
+            reason = http_responses.get(status)
+
         if r_headers:
             headers.update(r_headers)
 
         response = self._response_class(
             status=status,
+            reason=reason,
             body=BytesIO(body),
             headers=headers,
             preload_content=False,

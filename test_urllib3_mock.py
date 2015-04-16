@@ -18,6 +18,7 @@ def assert_reset():
 
 def assert_response(resp, body=None):
     assert resp.status_code == 200
+    assert resp.reason == 'OK'
     assert resp.headers['Content-Type'] == 'text/plain'
     assert resp.text == body
 
@@ -181,7 +182,7 @@ def test_throw_connection_error_explicit():
 
 def test_callback():
     body = b'test callback'
-    status = 400
+    status = '400 Broken Stuff'
     headers = {'foo': 'bar'}
     url = 'http://example.com/'
 
@@ -197,7 +198,8 @@ def test_callback():
         responses.add_callback(responses.GET, '/', request_callback)
         resp = requests.get(url)
         assert resp.text == "test callback"
-        assert resp.status_code == status
+        assert resp.status_code == 400
+        assert resp.reason == 'Broken Stuff'
         assert 'foo' in resp.headers
         assert resp.headers['foo'] == 'bar'
 
@@ -219,6 +221,7 @@ def test_callback_noheaders():
         resp = requests.get(url)
         assert resp.text == "test no additional header"
         assert resp.status_code == status
+        assert resp.reason == 'OK'
         assert 'content-type' in resp.headers
         assert resp.headers['content-type'] == 'text/plain'
 
@@ -264,6 +267,7 @@ def test_catchall():
         resp2 = requests.get('http://example.com/rabbit')
         resp3 = requests.get('https://example.com?bar=foo#123')
         assert resp0.status_code == status
+        assert resp0.reason == 'Bad Request'
         assert 'foo' in resp1.headers
         assert resp3.headers['foo'] == 'bar'
         assert "host='example.com'" in resp0.text
