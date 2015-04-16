@@ -294,7 +294,8 @@ def test_catchall():
 
 def test_responses_as_context_manager():
     def run():
-        with responses:
+        with responses as d2r2:
+            assert responses is d2r2
             responses.add(responses.GET, '/', body=b'test')
             resp = requests.get('http://example.com')
             assert_response(resp, 'test')
