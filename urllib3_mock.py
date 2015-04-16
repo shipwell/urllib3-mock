@@ -186,7 +186,7 @@ class Responses(object):
             self._calls.add(request, body)
             raise body
 
-        if isinstance(status, basestring):
+        if hasattr(status, 'split'):
             status, reason = status.split(None, 1)
             status = int(status)
         else:
