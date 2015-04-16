@@ -24,10 +24,10 @@ setup_requires = []
 if 'test' in sys.argv:
     setup_requires.append('pytest')
 
-install_requires = [
-    # 'urllib3' or 'requests'
-    'mock',
-]
+install_requires = []
+if sys.version_info < (3, 3):
+    install_requires.append('mock')
+# Also required: 'urllib3' or 'requests'
 
 tests_require = [
     'pytest',

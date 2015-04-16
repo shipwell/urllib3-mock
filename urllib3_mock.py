@@ -3,8 +3,6 @@ import inspect
 from collections import namedtuple
 from functools import update_wrapper
 
-import mock
-
 if sys.version_info < (3,):     # Python 2
     from cStringIO import StringIO as BytesIO
     from urlparse import urlparse, parse_qsl
@@ -19,6 +17,11 @@ else:                           # Python 3
 
     _exec = getattr(__import__('builtins'), 'exec')
     unicode = str
+
+if sys.version_info < (3, 3):
+    import mock
+else:
+    from unittest import mock
 
 Call = namedtuple('Call', ['request', 'response'])
 Request = namedtuple('Request', ['method', 'url', 'body', 'headers',
