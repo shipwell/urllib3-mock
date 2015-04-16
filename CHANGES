@@ -1,3 +1,11 @@
+0.3.3
+
+- The context manager returns the Responses instance
+- Send the reason related to the status_code
+- Allow to override the reason with a custom text
+- Show method for connection refused
+- Do not depend on external library `mock` for Python >= 3.3
+
 0.3.2
 
 - Add universal wheel support

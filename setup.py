@@ -52,7 +52,7 @@ class PyTest(TestCommand):
 
 setup(
     name='urllib3-mock',
-    version='0.3.2',
+    version='0.3.3',
     author='Florent Xicluna',
     author_email='florent.xicluna@gmail.com',
     url='https://github.com/florentx/urllib3-mock',
