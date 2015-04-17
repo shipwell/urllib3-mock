@@ -378,6 +378,25 @@ def test_response_cookies():
     assert_reset()
 
 
+def test_response_multiple_cookies():
+    body = b'test multiple cookies'
+    headers = [('set-cookie', 'session_id=12345'),
+               ('set-cookie', 'username=john john')]
+    url = 'http://example.com/'
+
+    @responses.activate
+    def run():
+        responses.add(responses.GET, '/', body=body, adding_headers=headers)
+        resp = requests.get(url)
+        assert 'session_id' in resp.cookies
+        assert 'username' in resp.cookies
+        assert 'password' not in resp.cookies
+        assert resp.cookies['session_id'] == '12345'
+        assert resp.cookies['username'] == 'john john'
+    run()
+    assert_reset()
+
+
 def test_allow_redirects_samehost():
     redirecting_url = 'http://example.com'
     final_url_path = '/1'
