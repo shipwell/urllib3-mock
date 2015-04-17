@@ -20,11 +20,11 @@ with open('README.rst') as f:
     long_description = f.read()
 
 setup_requires = []
+install_requires = []
 
 if 'test' in sys.argv:
     setup_requires.append('pytest')
 
-install_requires = []
 if sys.version_info < (3, 3):
     install_requires.append('mock')
 # Also required: 'urllib3' or 'requests'

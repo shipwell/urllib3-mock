@@ -9,4 +9,4 @@ install:
   - make develop
 script:
   - make lint
-  - py.test . --cov responses --cov-report term-missing
+  - py.test . --cov urllib3_mock --cov-report term-missing
