@@ -61,6 +61,21 @@ def get_wrapped(func, wrapper_template, evaldict):
     return wrapper
 
 
+class _FakeHeaders(list):
+    def get_all(self, key, default=None):
+        key = key.lower()
+        return [v for (k, v) in self if k.lower() == key]
+    getheaders = get_all
+
+
+class _FakeResponse(object):
+    def __init__(self, headers):
+        self.msg = _FakeHeaders(headers)
+
+    def isclosed(self):
+        return False
+
+
 class CallList(list):
 
     def add(self, request, response):
@@ -174,9 +189,9 @@ class Responses(object):
             self._calls.add(request, response)
             raise response
 
-        headers = {
-            'Content-Type': match['content_type'],
-        }
+        headers = [
+            ('Content-Type', match['content_type']),
+        ]
 
         if 'callback' in match:  # use callback
             status, r_headers, body = match['callback'](request)
@@ -196,14 +211,16 @@ class Responses(object):
             reason = http_reasons.get(status)
 
         if r_headers:
-            headers.update(r_headers)
+            headers.extend(r_headers.items()
+                           if hasattr(r_headers, 'items') else r_headers)
 
         response = self._response_class(
             status=status,
             reason=reason,
-            body=BytesIO(body),
+            body=BytesIO(body) if body else BytesIO(),
             headers=headers,
             preload_content=False,
+            original_response=_FakeResponse(headers),
         )
 
         self._calls.add(request, response)

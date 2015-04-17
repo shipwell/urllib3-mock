@@ -350,3 +350,75 @@ def test_activate_doesnt_change_signature_for_method():
     assert argspec == getargspec(decorated_test_function)
     assert decorated_test_function(1, 2) == test_case.test_function(1, 2)
     assert decorated_test_function(3) == test_case.test_function(3)
+
+
+def test_response_cookies():
+    body = b'test callback'
+    status = 200
+    headers = {'set-cookie': 'session_id=12345; a=b; c=d'}
+    url = 'http://example.com/'
+
+    def request_callback(request):
+        return (status, headers, body)
+
+    @responses.activate
+    def run():
+        responses.add_callback(responses.GET, '/', request_callback)
+        resp = requests.get(url)
+        assert resp.text == "test callback"
+        assert resp.status_code == status
+        assert 'session_id' in resp.cookies
+        assert resp.cookies['session_id'] == '12345'
+        for cookie in resp.cookies:
+            if cookie.name == 'session_id':
+                break
+        assert cookie.get_nonstandard_attr('a') == 'b'
+        assert cookie.get_nonstandard_attr('c') == 'd'
+    run()
+    assert_reset()
+
+
+def test_allow_redirects_samehost():
+    redirecting_url = 'http://example.com'
+    final_url_path = '/1'
+    final_url = '{0}{1}'.format(redirecting_url, final_url_path)
+    url_re = re.compile(r'^/(\d+)?$')
+
+    def request_callback(request):
+        # endpoint of chained redirect
+        if request.url.endswith(final_url_path):
+            return 200, (), b'test'
+        # otherwise redirect to an integer path
+        else:
+            if request.url.endswith('/0'):
+                n = 1
+            else:
+                n = 0
+            redirect_headers = {'location': '/{0!s}'.format(n)}
+            return 301, redirect_headers, None
+
+    def run():
+        # setup redirect
+        with responses:
+            responses.add_callback(responses.GET, url_re, request_callback)
+            resp_no_redirects = requests.get(redirecting_url,
+                                             allow_redirects=False)
+            assert resp_no_redirects.status_code == 301
+            assert len(responses.calls) == 1  # 1x300
+            assert responses.calls[0][1].status == 301
+        assert_reset()
+
+        with responses:
+            responses.add_callback(responses.GET, url_re, request_callback)
+            resp_yes_redirects = requests.get(redirecting_url,
+                                              allow_redirects=True)
+            assert len(responses.calls) == 3  # 2x300 + 1x200
+            assert len(resp_yes_redirects.history) == 2
+            assert resp_yes_redirects.status_code == 200
+            assert final_url == resp_yes_redirects.url
+            status_codes = [call[1].status for call in responses.calls]
+            assert status_codes == [301, 301, 200]
+        assert_reset()
+
+    run()
+    assert_reset()
