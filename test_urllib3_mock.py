@@ -196,7 +196,7 @@ def test_throw_connection_error_explicit():
 def test_callback():
     body = b'test callback'
     status = '400 Broken Stuff'
-    headers = {'foo': 'bar'}
+    headers = {'foo': 'bar', 'content-type': 'text/nonsense'}
     url = 'http://example.com/'
 
     def request_callback(request):
@@ -215,6 +215,8 @@ def test_callback():
         assert resp.reason == 'Broken Stuff'
         assert 'foo' in resp.headers
         assert resp.headers['foo'] == 'bar'
+        assert resp.headers['Content-Type'] == 'text/nonsense'
+        assert len(resp.raw._original_response.msg) == 2
 
     run()
     assert_reset()
@@ -374,6 +376,7 @@ def test_response_cookies():
                 break
         assert cookie.get_nonstandard_attr('a') == 'b'
         assert cookie.get_nonstandard_attr('c') == 'd'
+
     run()
     assert_reset()
 
@@ -393,6 +396,7 @@ def test_response_multiple_cookies():
         assert 'password' not in resp.cookies
         assert resp.cookies['session_id'] == '12345'
         assert resp.cookies['username'] == 'john john'
+
     run()
     assert_reset()
 

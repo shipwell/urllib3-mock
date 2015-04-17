@@ -211,8 +211,13 @@ class Responses(object):
             reason = http_reasons.get(status)
 
         if r_headers:
-            headers.extend(r_headers.items()
-                           if hasattr(r_headers, 'items') else r_headers)
+            if hasattr(r_headers, 'items'):
+                r_headers = r_headers.items()
+            for key, value in r_headers:
+                if key.lower() == 'content-type':
+                    if headers[0][0].lower() == 'content-type':
+                        del headers[0]  # No duplicate content_type
+                headers.append((key, value))
 
         response = self._response_class(
             status=status,
