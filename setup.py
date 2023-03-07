@@ -76,7 +76,6 @@ setup(
         'Intended Audience :: System Administrators',
         'Operating System :: OS Independent',
         'Topic :: Software Development',
-        'Programming Language :: Python :: 2',
         'Programming Language :: Python :: 3',
     ],
 )

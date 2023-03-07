@@ -1,5 +1,9 @@
+import inspect
 import re
-from inspect import getargspec
+from inspect import (
+    getargspec,
+    getfullargspec,
+)
 
 import pytest
 import requests
@@ -335,7 +339,7 @@ def test_activate_doesnt_change_signature():
         return (a, b)
 
     decorated_test_function = responses.activate(test_function)
-    assert getargspec(test_function) == getargspec(decorated_test_function)
+    assert inspect.signature(test_function) == inspect.signature(decorated_test_function)
     assert decorated_test_function(1, 2) == test_function(1, 2)
     assert decorated_test_function(3) == test_function(3)
 
@@ -347,9 +351,9 @@ def test_activate_doesnt_change_signature_for_method():
             return (self, a, b)
 
     test_case = TestCase()
-    argspec = getargspec(test_case.test_function)
+    signature = inspect.signature(test_case.test_function)
     decorated_test_function = responses.activate(test_case.test_function)
-    assert argspec == getargspec(decorated_test_function)
+    assert signature == inspect.signature(decorated_test_function)
     assert decorated_test_function(1, 2) == test_case.test_function(1, 2)
     assert decorated_test_function(3) == test_case.test_function(3)
 

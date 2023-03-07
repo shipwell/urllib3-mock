@@ -1,27 +1,17 @@
-import sys
 import inspect
 from collections import namedtuple
-from functools import update_wrapper
+from functools import (
+    wraps,
+)
 
-if sys.version_info < (3,):     # Python 2
-    from httplib import responses as http_reasons
-    from cStringIO import StringIO as BytesIO
-    from urlparse import urlparse, parse_qsl
+from http.client import responses as http_reasons
+from io import BytesIO
+from urllib.parse import urlparse, parse_qsl
 
-    def _exec(code, g):
-        exec('exec code in g')
-else:                           # Python 3
-    from http.client import responses as http_reasons
-    from io import BytesIO
-    from urllib.parse import urlparse, parse_qsl
+_exec = getattr(__import__('builtins'), 'exec')
+unicode = str
 
-    _exec = getattr(__import__('builtins'), 'exec')
-    unicode = str
-
-if sys.version_info < (3, 3):
-    import mock
-else:
-    from unittest import mock
+from unittest import mock
 
 Call = namedtuple('Call', ['request', 'response'])
 Request = namedtuple('Request', ['method', 'url', 'body', 'headers',
@@ -30,34 +20,22 @@ _urllib3_import = """\
 from %(package)s.response import HTTPResponse
 from %(package)s.exceptions import ProtocolError
 """
-_wrapper_template = """\
-def wrapper%(signature)s:
-    with responses:
-        return func%(funcargs)s
-"""
 
 __all__ = ['Responses']
 
 
-def get_wrapped(func, wrapper_template, evaldict):
-    signature = inspect.signature(func)
+def get_wrapped(func, responses):
+    if inspect.iscoroutinefunction(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            with responses:
+                return await func(*args, **kwargs)
+    else:
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            with responses:
+                return func(*args, **kwargs)
 
-    is_bound_method = hasattr(func, '__self__')
-    if is_bound_method:
-        args = args[1:]     # Omit 'self'
-    callargs = inspect.Signature(parameters=[
-        inspect.Parameter(name=name, kind=inspect.Parameter.POSITIONAL_OR_KEYWORD)
-        for name in signature.parameters
-    ])
-
-    ctx = {'signature': signature, 'funcargs': callargs}
-    _exec(wrapper_template % ctx, evaldict)
-
-    wrapper = evaldict['wrapper']
-
-    update_wrapper(wrapper, func)
-    if is_bound_method:
-        wrapper = wrapper.__get__(func.__self__, type(func.__self__))
     return wrapper
 
 
@@ -146,8 +124,7 @@ class Responses(object):
         self.reset()
 
     def activate(self, func):
-        evaldict = {'responses': self, 'func': func}
-        return get_wrapped(func, _wrapper_template, evaldict)
+        return get_wrapped(func, self)
 
     def _find_match(self, request):
         for match in self._urls:
