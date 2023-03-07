@@ -12,6 +12,17 @@ This is an adaptation of the `responses`_ library.
 .. _urllib3: https://urllib3.readthedocs.org/
 .. _responses: https://github.com/getsentry/responses
 
+Changes from florentx/urllib3-mock Upstream
+-------------------------------------------
+
+This applies a couple of important fixes from the unmaintained upstream:
+
+1. Support for Python 3.11
+2. Drop support for Python 2
+3. Support for async functions
+
+More information at https://github.com/florentx/urllib3-mock/pull/8
+
 
 Response body as string
 -----------------------
